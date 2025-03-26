@@ -2,6 +2,8 @@
 using System.Threading;
 using TeoEngine.Private;
 using LibKatana;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 
 namespace TeoEngine
 {
@@ -46,11 +48,8 @@ namespace TeoEngine
         }
 
 
-        public static void Initialize(Action userStart, Action userUpdate)
+        static void Start(Action userStart)
         {
-            if (EngineStarted == true) return;
-
-            ////    Start
             EngineStarted = true;
             Console.Clear();
             SetWindowSize(128, 40, 12);
@@ -62,23 +61,48 @@ namespace TeoEngine
             Time.Start();
             userStart?.Invoke();
             Draw.Start();
+        }
+
+        static void Update(Action userUpdate)
+        {
+            Time.TimeControl();
+            userUpdate?.Invoke();
+            Input.EveryFrame();
+            Application.Update();
+            Draw.Update();
+
+            if (AutoGarbageCollect && Time.FirstFrameInSecond())
+                GC.Collect();
+
+            if (DelayFrames)
+                Thread.Sleep(12);
+        }
 
 
-            ////    Update
-            while (true)
+        public static void Initialize(Action userStart, Action userUpdate)
+        {
+            if (EngineStarted == true) return;
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                Time.TimeControl();
-                userUpdate?.Invoke();
-                Input.EveryFrame();
-                Application.Update();
-                Draw.Update();
-
-                if (AutoGarbageCollect && Time.FirstFrameInSecond())
-                    GC.Collect();
-
-                if (DelayFrames)
-                    Thread.Sleep(12);
+                Console.WriteLine("This engine is only compatible with Windows OS");
+                return;
             }
+
+            // application must be run as administrator for console, and text size adjustments
+            using (var identity = WindowsIdentity.GetCurrent())
+            {
+                var principal = new WindowsPrincipal(identity);
+                if (!principal.IsInRole(WindowsBuiltInRole.Administrator))
+                {
+                    Console.WriteLine("This application must be run as administrator");
+                    return;
+                }
+            }
+
+            Start(userStart);
+
+            while (true)
+                Update(userUpdate);
         }
 
 
